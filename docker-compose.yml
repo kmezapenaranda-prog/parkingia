@@ -6,13 +6,53 @@ services:
     container_name: parking-ia-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: parkinguser
-      POSTGRES_PASSWORD: parkingpass
-      POSTGRES_DB: parkingdb
+      POSTGRES_USER: ${DB_USER:-parkinguser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-parkingpass}
+      POSTGRES_DB: ${DB_NAME:-parkingdb}
     ports:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-parkinguser}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: parking-ia-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: ${PORT:-3000}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-parkinguser}
+      DB_PASSWORD: ${DB_PASSWORD:-parkingpass}
+      DB_NAME: ${DB_NAME:-parkingdb}
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_ID: ${WHATSAPP_PHONE_ID:-}
+      WHATSAPP_ADMIN_PHONE: ${WHATSAPP_ADMIN_PHONE:-}
+    ports:
+      - '${PORT:-3000}:3000'
+
+  # Opcional — requiere acceso a display/cámara del host, ver Dockerfile.detector.
+  # Levantar explícitamente con: docker compose --profile detector up detector
+  detector:
+    build:
+      context: .
+      dockerfile: Dockerfile.detector
+    container_name: parking-ia-detector
+    profiles: ['detector']
+    depends_on:
+      - backend
+    environment:
+      PARKING_API_URL: http://backend:3000/parking/entry
 
 volumes:
   postgres_data:

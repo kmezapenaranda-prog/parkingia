@@ -1,41 +1,10 @@
 """
 detector_placas.py — Detección de vehículos + placas colombianas para Parking IA
 Pipeline: YOLOv8n (vehículos) → bbox +20% → contornos → EasyOCR → validación placa
+
+Dependencias: pip install -r requirements.txt
 """
 
-import sys
-import subprocess
-
-# 1. LISTA DE DEPENDENCIAS (Nombre en PIP, Nombre en Import)
-REQUIRED_PACKAGES = [
-    ("opencv-python", "cv2"),
-    ("numpy", "numpy"),
-    ("easyocr", "easyocr"),
-    ("ultralytics", "ultralytics"),
-    ("Pillow", "PIL"),
-    ("requests", "requests")
-]
-
-print("[setup] Verificando entorno y dependencias...")
-
-# 2. PROCESO DE VERIFICACIÓN E INSTALACIÓN AUTOMÁTICA
-for package, import_name in REQUIRED_PACKAGES:
-    try:
-        # Intenta importar el módulo para verificar si ya existe
-        __import__(import_name)
-    except ImportError:
-        # Si no existe, lo captura e inicia la instalación
-        print(f"[setup] ⚠️ Falta el paquete '{import_name}'. Instalando {package}...")
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package, "-q"])
-            print(f"[setup] ✅ {package} instalado con éxito.")
-        except Exception as e:
-            print(f"[error] ❌ Error crítico al instalar {package}: {e}")
-            sys.exit(1)
-
-print("[setup] 🎉 Todas las dependencias están verificadas y listas.\n")
-
-# 3. IMPORTS NORMALES DEL PROGRAMA
 import cv2
 import numpy as np
 import easyocr
@@ -56,7 +25,7 @@ except ImportError:
 
 print(f"[info] Dispositivo: {'GPU (CUDA)' if GPU_AVAILABLE else 'CPU'}")
 
-DEFAULT_VIDEO = r"C:\Users\kevin\Documents\parking-ia\carro1.mp4"
+DEFAULT_VIDEO = os.environ.get("DETECTOR_DEFAULT_VIDEO", "carro1.mp4")
 
 # Clases YOLO COCO → etiqueta interna
 VEHICLE_MAP = {
@@ -82,7 +51,7 @@ def _plate_type(cleaned: str) -> str | None:
             return ptype
     return None
 
-PARKING_API = "http://localhost:3000/parking/entry"
+PARKING_API = os.environ.get("PARKING_API_URL", "http://localhost:3000/parking/entry")
 
 # Colores de bbox según resultado del POST (BGR)
 POST_COLORS = {

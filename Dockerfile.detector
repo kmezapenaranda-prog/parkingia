@@ -1,0 +1,21 @@
+# Detector de placas — usa cv2.imshow, requiere acceso a un display (X11) y,
+# si se usa --camara, al dispositivo de video del host. En Linux:
+#   docker run --rm -it --device=/dev/video0 -e DISPLAY=$DISPLAY \
+#     -v /tmp/.X11-unix:/tmp/.X11-unix parking-ia-detector --camara
+# Para procesar video/imagen sin ventana emergente, el script necesitaría
+# adaptarse a modo headless (no incluido aquí).
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY detector_placas.py yolov8n.pt ./
+
+ENV PARKING_API_URL=http://backend:3000/parking/entry
+
+ENTRYPOINT ["python", "detector_placas.py"]
