@@ -12,6 +12,11 @@ import {
 import { MembershipStatus } from '../membership.entity';
 
 export class CreateMembershipDto {
+  @IsNotEmpty({ message: 'El negocio (tenantId) es obligatorio' })
+  @IsInt()
+  @Min(1)
+  tenantId: number;
+
   @IsNotEmpty({ message: 'El id del vehículo es obligatorio' })
   @IsInt()
   @Min(1)

@@ -3,12 +3,22 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { Tenant } from '../tenants/tenant.entity';
 
 @Entity('entries')
 export class Entry {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column({ name: 'tenant_id' })
+  tenantId: number;
+
+  @ManyToOne(() => Tenant, { eager: false })
+  @JoinColumn({ name: 'tenant_id' })
+  tenant: Tenant;
 
   @Column({ length: 10 })
   plate: string;

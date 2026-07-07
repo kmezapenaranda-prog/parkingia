@@ -1,7 +1,7 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, In, Repository } from 'typeorm';
-import { Entry } from '../entries/entry.entity';
+import { Entry } from './entry.entity';
 import { Vehicle, VehicleType } from '../vehicles/vehicle.entity';
 import { MembershipsService } from '../memberships/memberships.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -49,10 +49,20 @@ export class ParkingService {
     private readonly settingsService: SettingsService,
   ) {}
 
-  async registerEntry(plate: string): Promise<Entry & { action: string }> {
+  private async getSettingsOrThrow(tenantId: number): Promise<Settings> {
+    const settings = await this.settingsService.get(tenantId);
+    if (!settings) {
+      throw new BadRequestException(
+        'Este negocio aún no tiene tarifas configuradas. Configúralas en Tarifas antes de operar el parqueadero.',
+      );
+    }
+    return settings;
+  }
+
+  async registerEntry(tenantId: number, plate: string): Promise<Entry & { action: string }> {
     const normalized = plate.toUpperCase();
     const existing = await this.entryRepo.findOne({
-      where: { plate: normalized, exitTime: IsNull() },
+      where: { tenantId, plate: normalized, exitTime: IsNull() },
     });
     if (existing) {
       throw new ConflictException(
@@ -60,10 +70,11 @@ export class ParkingService {
       );
     }
 
-    let vehicle = await this.vehicleRepo.findOne({ where: { plate: normalized } });
+    let vehicle = await this.vehicleRepo.findOne({ where: { tenantId, plate: normalized } });
     if (!vehicle) {
       vehicle = await this.vehicleRepo.save(
         this.vehicleRepo.create({
+          tenantId,
           plate: normalized,
           type: detectTypeFromPlate(normalized),
           clientId: null,
@@ -72,12 +83,13 @@ export class ParkingService {
     }
     const entry = await this.entryRepo.save(
       this.entryRepo.create({
+        tenantId,
         plate: normalized,
         vehicleType: vehicle.type,
       }),
     );
 
-    const { status } = await this.membershipsService.getStatusByPlate(normalized);
+    const { status } = await this.membershipsService.getStatusByPlate(normalized, tenantId);
     const action =
       status === 'ACTIVE' ? 'GRANTED' :
       status === 'EXPIRED' ? 'ALERT' :
@@ -87,10 +99,10 @@ export class ParkingService {
     return { ...entry, action };
   }
 
-  async registerExit(plate: string) {
+  async registerExit(tenantId: number, plate: string) {
     const normalized = plate.toUpperCase();
     const entry = await this.entryRepo.findOne({
-      where: { plate: normalized, exitTime: IsNull() },
+      where: { tenantId, plate: normalized, exitTime: IsNull() },
     });
     if (!entry) {
       throw new NotFoundException(
@@ -103,10 +115,10 @@ export class ParkingService {
       (exitTime.getTime() - entry.entryTime.getTime()) / 60000,
     );
 
-    const { status } = await this.membershipsService.getStatusByPlate(normalized);
+    const { status } = await this.membershipsService.getStatusByPlate(normalized, tenantId);
     let amountToPay = 0;
     if (status !== 'ACTIVE') {
-      const settings = await this.settingsService.get();
+      const settings = await this.getSettingsOrThrow(tenantId);
       const vehicleType = entry.vehicleType ?? 'car';
       amountToPay = calculateFare(totalMinutes, vehicleType, settings);
     }
@@ -129,10 +141,10 @@ export class ParkingService {
     };
   }
 
-  async getStatus(plate: string) {
+  async getStatus(tenantId: number, plate: string) {
     const normalized = plate.toUpperCase();
     const entry = await this.entryRepo.findOne({
-      where: { plate: normalized, exitTime: IsNull() },
+      where: { tenantId, plate: normalized, exitTime: IsNull() },
     });
     if (!entry) return { plate: normalized, isInside: false };
 
@@ -148,24 +160,24 @@ export class ParkingService {
     };
   }
 
-  async getActive() {
+  async getActive(tenantId: number) {
     const entries = await this.entryRepo.find({
-      where: { exitTime: IsNull() },
+      where: { tenantId, exitTime: IsNull() },
       order: { entryTime: 'ASC' },
     });
     if (entries.length === 0) return [];
 
     const plates = entries.map((e) => e.plate);
-    const vehicles = await this.vehicleRepo.find({ where: { plate: In(plates) } });
+    const vehicles = await this.vehicleRepo.find({ where: { tenantId, plate: In(plates) } });
     const vehicleMap = new Map(vehicles.map((v) => [v.plate, v]));
-    const settings = await this.settingsService.get();
+    const settings = await this.settingsService.get(tenantId);
     const now = Date.now();
 
     return entries.map((e) => {
       const vehicle = vehicleMap.get(e.plate);
       const vehicleType = e.vehicleType ?? vehicle?.type ?? 'car';
       const currentMinutes = Math.floor((now - e.entryTime.getTime()) / 60000);
-      const estimatedCost = calculateFare(currentMinutes, vehicleType, settings);
+      const estimatedCost = settings ? calculateFare(currentMinutes, vehicleType, settings) : 0;
       return {
         id: e.id,
         plate: e.plate,
@@ -176,6 +188,10 @@ export class ParkingService {
         estimatedCost,
       };
     });
+  }
+
+  getEntries(tenantId: number): Promise<Entry[]> {
+    return this.entryRepo.find({ where: { tenantId }, order: { entryTime: 'DESC' } });
   }
 
   async cleanupAllMemberships(): Promise<{ deleted: number }> {

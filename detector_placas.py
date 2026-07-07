@@ -52,6 +52,7 @@ def _plate_type(cleaned: str) -> str | None:
     return None
 
 PARKING_API = os.environ.get("PARKING_API_URL", "http://localhost:3000/parking/entry")
+PARKING_TENANT_ID = int(os.environ.get("PARKING_TENANT_ID", "1"))
 
 # Colores de bbox según resultado del POST (BGR)
 POST_COLORS = {
@@ -158,7 +159,11 @@ class PlateDetector:
     def _post_entry(self, plate: str) -> str:
         """POST /parking/entry. Retorna 'ok', 'duplicate' o 'error'."""
         try:
-            r = requests.post(PARKING_API, json={"plate": plate}, timeout=3)
+            r = requests.post(
+                PARKING_API,
+                json={"plate": plate, "tenantId": PARKING_TENANT_ID},
+                timeout=3,
+            )
             if r.status_code in (200, 201):
                 return "ok"
             if r.status_code == 409:

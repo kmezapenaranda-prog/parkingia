@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, DeleteDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { Client } from '../clients/client.entity';
 import { Vehicle } from '../vehicles/vehicle.entity';
+import { Tenant } from '../tenants/tenant.entity';
 
 export enum MembershipStatus {
   ACTIVE = 'active',
@@ -12,6 +13,13 @@ export enum MembershipStatus {
 export class Membership {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column({ name: 'tenant_id' })
+  tenantId: number;
+
+  @ManyToOne(() => Tenant, { eager: false })
+  @JoinColumn({ name: 'tenant_id' })
+  tenant: Tenant;
 
   @Column({ name: 'vehicle_id' })
   vehicleId: number;
@@ -47,4 +55,7 @@ export class Membership {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date | null;
 }

@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Entry } from '../entries/entry.entity';
+import { Entry } from '../parking/entry.entity';
 import { Membership } from '../memberships/membership.entity';
 
 function formatDuration(minutes: number): string {
@@ -21,12 +21,13 @@ export class ReportsService {
     private readonly membershipRepo: Repository<Membership>,
   ) {}
 
-  async getCajaReport(fecha: string) {
+  async getCajaReport(fecha: string, tenantId: number) {
     // Vehicles that entered on this date (for count, hourly breakdown, visitor classification)
     const entradas: { plate: string }[] = await this.entryRepo.query(
       `SELECT plate FROM entries
-       WHERE (entry_time AT TIME ZONE 'America/Bogota')::date = $1::date`,
-      [fecha],
+       WHERE tenant_id = $2
+         AND (entry_time AT TIME ZONE 'America/Bogota')::date = $1::date`,
+      [fecha, tenantId],
     );
 
     // Closed entries whose exit_time falls on this date → revenue of the day
@@ -44,18 +45,19 @@ export class ReportsService {
               exit_time     AS "exitTime",
               amount_paid   AS "amountPaid"
        FROM entries
-       WHERE exit_time IS NOT NULL
+       WHERE tenant_id = $2
+         AND exit_time IS NOT NULL
          AND (exit_time AT TIME ZONE 'America/Bogota')::date = $1::date
        ORDER BY exit_time ASC`,
-      [fecha],
+      [fecha, tenantId],
     );
 
     // Plates with active membership on this date
     const membershipRows: { plate: string }[] = await this.membershipRepo.query(
       `SELECT DISTINCT v.plate FROM memberships m
        JOIN vehicles v ON v.id = m.vehicle_id
-       WHERE m.start_date <= $1 AND m.end_date >= $1`,
-      [fecha],
+       WHERE m.tenant_id = $2 AND m.start_date <= $1 AND m.end_date >= $1`,
+      [fecha, tenantId],
     );
     const membershipPlates = new Set(membershipRows.map((r) => r.plate));
 
@@ -64,10 +66,11 @@ export class ReportsService {
       `SELECT EXTRACT(HOUR FROM entry_time AT TIME ZONE 'America/Bogota')::int AS hora,
               COUNT(*)::int AS cantidad
        FROM entries
-       WHERE (entry_time AT TIME ZONE 'America/Bogota')::date = $1::date
+       WHERE tenant_id = $2
+         AND (entry_time AT TIME ZONE 'America/Bogota')::date = $1::date
        GROUP BY hora
        ORDER BY hora ASC`,
-      [fecha],
+      [fecha, tenantId],
     );
 
     const totalCOP = cobrosRaw.reduce((sum, e) => sum + (e.amountPaid ?? 0), 0);

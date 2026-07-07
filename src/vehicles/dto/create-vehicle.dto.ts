@@ -11,6 +11,11 @@ import {
 import { VehicleStatus, VehicleType } from '../vehicle.entity';
 
 export class CreateVehicleDto {
+  @IsNotEmpty({ message: 'El negocio (tenantId) es obligatorio' })
+  @IsInt()
+  @Min(1)
+  tenantId: number;
+
   @IsNotEmpty({ message: 'El id del cliente es obligatorio' })
   @IsInt()
   @Min(1)

@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, DeleteDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Tenant } from '../tenants/tenant.entity';
 
 export enum ClientStatus {
   ACTIVE = 'active',
@@ -7,14 +8,22 @@ export enum ClientStatus {
 }
 
 @Entity('clients')
+@Index(['tenantId', 'document'], { unique: true })
 export class Client {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ name: 'tenant_id' })
+  tenantId: number;
+
+  @ManyToOne(() => Tenant, { eager: false })
+  @JoinColumn({ name: 'tenant_id' })
+  tenant: Tenant;
+
   @Column({ name: 'full_name', length: 150 })
   fullName: string;
 
-  @Column({ length: 20, unique: true })
+  @Column({ length: 20 })
   document: string;
 
   @Column({ length: 20, nullable: true })
@@ -31,4 +40,7 @@ export class Client {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date | null;
 }

@@ -6,13 +6,16 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   ParseIntPipe,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { MembershipsService } from './memberships.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 
+@ApiTags('memberships')
 @Controller('memberships')
 export class MembershipsController {
   constructor(private readonly membershipsService: MembershipsService) {}
@@ -24,29 +27,29 @@ export class MembershipsController {
   }
 
   @Get()
-  findAll() {
-    return this.membershipsService.findAll();
+  findAll(@Query('tenantId', ParseIntPipe) tenantId: number) {
+    return this.membershipsService.findAll(tenantId);
   }
 
   // Ruta fija debe ir antes de la ruta dinámica al mismo nivel
   @Get('expiring')
-  findExpiring() {
-    return this.membershipsService.findExpiring();
+  findExpiring(@Query('tenantId', ParseIntPipe) tenantId: number) {
+    return this.membershipsService.findExpiring(tenantId);
   }
 
   @Get(':plate/status')
-  getStatus(@Param('plate') plate: string) {
-    return this.membershipsService.getStatusByPlate(plate);
+  getStatus(@Param('plate') plate: string, @Query('tenantId', ParseIntPipe) tenantId: number) {
+    return this.membershipsService.getStatusByPlate(plate, tenantId);
   }
 
   @Put(':id/renew')
-  renew(@Param('id', ParseIntPipe) id: number) {
-    return this.membershipsService.renew(id);
+  renew(@Param('id', ParseIntPipe) id: number, @Query('tenantId', ParseIntPipe) tenantId: number) {
+    return this.membershipsService.renew(id, tenantId);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.membershipsService.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @Query('tenantId', ParseIntPipe) tenantId: number) {
+    return this.membershipsService.remove(id, tenantId);
   }
 }
