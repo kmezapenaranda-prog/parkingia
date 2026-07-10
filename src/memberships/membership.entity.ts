@@ -50,6 +50,9 @@ export class Membership {
   @Column({ name: 'auto_renew', default: false })
   autoRenew: boolean;
 
+  @Column({ name: 'paid_at', type: 'timestamptz', nullable: true })
+  paidAt: Date | null;
+
   @Column({ length: 150, nullable: true })
   company: string | null;
 

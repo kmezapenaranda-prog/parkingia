@@ -43,6 +43,7 @@ export class MembershipsService {
       price: dto.price,
       autoRenew: dto.autoRenew ?? false,
       company: dto.company ?? null,
+      paidAt: new Date(),
     });
     return this.membershipRepo.save(membership);
   }
@@ -93,6 +94,7 @@ export class MembershipsService {
     currentEnd.setMonth(currentEnd.getMonth() + 1);
     membership.endDate = currentEnd.toISOString().split('T')[0];
     membership.status = MembershipStatus.ACTIVE;
+    membership.paidAt = new Date();
     return this.membershipRepo.save(membership);
   }
 
