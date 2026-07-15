@@ -8,7 +8,10 @@ import { DateFormatterInterceptor } from './common/interceptors/date-formatter.i
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors({ origin: 'http://localhost:3001' });
+  const corsOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:3001')
+    .split(',')
+    .map((origin) => origin.trim());
+  app.enableCors({ origin: corsOrigins });
   app.useGlobalPipes(new ValidationPipe());
   app.useGlobalInterceptors(new DateFormatterInterceptor());
 
