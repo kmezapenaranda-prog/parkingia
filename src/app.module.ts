@@ -10,6 +10,7 @@ import { ReportsModule } from './reports/reports.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { HealthModule } from './health/health.module';
 import { Entry } from './parking/entry.entity';
 import { Client } from './clients/client.entity';
 import { Vehicle } from './vehicles/vehicle.entity';
@@ -38,6 +39,7 @@ import { User } from './users/user.entity';
     TenantsModule,
     UsersModule,
     AuthModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
