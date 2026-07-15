@@ -19,11 +19,15 @@ export class ClientsService {
   ) {}
 
   async create(dto: CreateClientDto): Promise<Client> {
-    const existing = await this.clientRepo.findOne({ where: { document: dto.document } });
+    const existing = await this.clientRepo.findOne({
+      where: { tenantId: dto.tenantId, document: dto.document },
+      withDeleted: true,
+    });
     if (existing) {
       throw new ConflictException(`Ya existe un cliente con el documento ${dto.document}`);
     }
     const client = this.clientRepo.create({
+      tenantId: dto.tenantId,
       fullName: dto.fullName,
       document: dto.document,
       phone: dto.phone ?? null,
@@ -34,20 +38,23 @@ export class ClientsService {
     return this.clientRepo.save(client);
   }
 
-  findAll(): Promise<Client[]> {
-    return this.clientRepo.find({ order: { createdAt: 'DESC' } });
+  findAll(tenantId: number): Promise<Client[]> {
+    return this.clientRepo.find({ where: { tenantId }, order: { createdAt: 'DESC' } });
   }
 
-  async findOne(id: number): Promise<Client> {
-    const client = await this.clientRepo.findOne({ where: { id } });
+  async findOne(id: number, tenantId: number): Promise<Client> {
+    const client = await this.clientRepo.findOne({ where: { id, tenantId } });
     if (!client) throw new NotFoundException(`Cliente ${id} no encontrado`);
     return client;
   }
 
-  async update(id: number, dto: UpdateClientDto): Promise<Client> {
-    const client = await this.findOne(id);
+  async update(id: number, dto: UpdateClientDto, tenantId: number): Promise<Client> {
+    const client = await this.findOne(id, tenantId);
     if (dto.document && dto.document !== client.document) {
-      const existing = await this.clientRepo.findOne({ where: { document: dto.document } });
+      const existing = await this.clientRepo.findOne({
+        where: { tenantId, document: dto.document },
+        withDeleted: true,
+      });
       if (existing) {
         throw new ConflictException(`Ya existe un cliente con el documento ${dto.document}`);
       }
@@ -63,10 +70,10 @@ export class ClientsService {
     return this.clientRepo.save(client);
   }
 
-  async remove(id: number): Promise<void> {
-    const client = await this.findOne(id);
-    await this.membershipRepo.delete({ clientId: id });
-    await this.vehicleRepo.delete({ clientId: id });
-    await this.clientRepo.remove(client);
+  async remove(id: number, tenantId: number): Promise<void> {
+    await this.findOne(id, tenantId);
+    await this.membershipRepo.softDelete({ clientId: id });
+    await this.vehicleRepo.softDelete({ clientId: id });
+    await this.clientRepo.softDelete(id);
   }
 }

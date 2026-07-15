@@ -1,15 +1,22 @@
 import {
   IsEmail,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   Length,
   Matches,
+  Min,
 } from 'class-validator';
 import { ClientStatus } from '../client.entity';
 
 export class CreateClientDto {
+  @IsNotEmpty({ message: 'El negocio (tenantId) es obligatorio' })
+  @IsInt()
+  @Min(1)
+  tenantId: number;
+
   @IsNotEmpty({ message: 'El nombre completo es obligatorio' })
   @IsString()
   @Length(2, 150)

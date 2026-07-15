@@ -1,9 +1,17 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Tenant } from '../tenants/tenant.entity';
 
 @Entity('settings')
 export class Settings {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column({ name: 'tenant_id', unique: true })
+  tenantId: number;
+
+  @ManyToOne(() => Tenant, { eager: false })
+  @JoinColumn({ name: 'tenant_id' })
+  tenant: Tenant;
 
   @Column({ name: 'fraccion_carro', type: 'int', default: 700 })
   fraccionCarro: number;

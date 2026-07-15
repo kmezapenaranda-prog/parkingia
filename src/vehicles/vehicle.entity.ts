@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, DeleteDateColumn, ManyToOne, JoinColumn, OneToMany, Index } from 'typeorm';
 import { Client } from '../clients/client.entity';
 import { Membership } from '../memberships/membership.entity';
+import { Tenant } from '../tenants/tenant.entity';
 
 export enum VehicleType {
   CAR = 'car',
@@ -14,14 +15,22 @@ export enum VehicleStatus {
 }
 
 @Entity('vehicles')
+@Index(['tenantId', 'plate'], { unique: true })
 export class Vehicle {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ name: 'tenant_id' })
+  tenantId: number;
+
+  @ManyToOne(() => Tenant, { eager: false })
+  @JoinColumn({ name: 'tenant_id' })
+  tenant: Tenant;
+
   @Column({ name: 'client_id', nullable: true })
   clientId: number | null;
 
-  @Column({ length: 10, unique: true })
+  @Column({ length: 10 })
   plate: string;
 
   @Column({ type: 'enum', enum: VehicleType })
@@ -38,6 +47,9 @@ export class Vehicle {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date | null;
 
   @ManyToOne(() => Client, { eager: false, nullable: true })
   @JoinColumn({ name: 'client_id' })

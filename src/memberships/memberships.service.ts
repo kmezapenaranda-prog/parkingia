@@ -19,7 +19,9 @@ export class MembershipsService {
   ) {}
 
   async create(dto: CreateMembershipDto): Promise<Membership> {
-    const vehicle = await this.vehicleRepo.findOne({ where: { id: dto.vehicleId } });
+    const vehicle = await this.vehicleRepo.findOne({
+      where: { id: dto.vehicleId, tenantId: dto.tenantId },
+    });
     if (!vehicle) throw new NotFoundException(`Vehículo ${dto.vehicleId} no encontrado`);
 
     const activeMembership = await this.membershipRepo.findOne({
@@ -32,6 +34,7 @@ export class MembershipsService {
     }
 
     const membership = this.membershipRepo.create({
+      tenantId: dto.tenantId,
       vehicleId: dto.vehicleId,
       clientId: dto.clientId,
       startDate: dto.startDate,
@@ -40,6 +43,7 @@ export class MembershipsService {
       price: dto.price,
       autoRenew: dto.autoRenew ?? false,
       company: dto.company ?? null,
+      paidAt: new Date(),
     });
     return this.membershipRepo.save(membership);
   }
@@ -49,15 +53,16 @@ export class MembershipsService {
     return { deleted: result[1] ?? 0 };
   }
 
-  findAll(): Promise<Membership[]> {
+  findAll(tenantId: number): Promise<Membership[]> {
     return this.membershipRepo.find({
+      where: { tenantId },
       relations: ['client', 'vehicle'],
       order: { createdAt: 'DESC' },
     });
   }
 
-  async getStatusByPlate(plate: string): Promise<{ status: string; membership?: Membership }> {
-    const vehicle = await this.vehicleRepo.findOne({ where: { plate: plate.toUpperCase() } });
+  async getStatusByPlate(plate: string, tenantId: number): Promise<{ status: string; membership?: Membership }> {
+    const vehicle = await this.vehicleRepo.findOne({ where: { plate: plate.toUpperCase(), tenantId } });
     if (!vehicle) return { status: 'NOT_FOUND' };
 
     // find() + take:1 garantiza ORDER BY end_date DESC LIMIT 1 sin el bug de findOne+order
@@ -80,8 +85,8 @@ export class MembershipsService {
     return { status: 'ACTIVE', membership };
   }
 
-  async renew(id: number): Promise<Membership> {
-    const membership = await this.membershipRepo.findOne({ where: { id } });
+  async renew(id: number, tenantId: number): Promise<Membership> {
+    const membership = await this.membershipRepo.findOne({ where: { id, tenantId } });
     if (!membership) throw new NotFoundException(`Mensualidad ${id} no encontrada`);
 
     // Extend end_date by exactly 1 month from the current end_date
@@ -89,16 +94,17 @@ export class MembershipsService {
     currentEnd.setMonth(currentEnd.getMonth() + 1);
     membership.endDate = currentEnd.toISOString().split('T')[0];
     membership.status = MembershipStatus.ACTIVE;
+    membership.paidAt = new Date();
     return this.membershipRepo.save(membership);
   }
 
-  async remove(id: number): Promise<void> {
-    const membership = await this.membershipRepo.findOne({ where: { id } });
+  async remove(id: number, tenantId: number): Promise<void> {
+    const membership = await this.membershipRepo.findOne({ where: { id, tenantId } });
     if (!membership) throw new NotFoundException(`Mensualidad ${id} no encontrada`);
-    await this.membershipRepo.remove(membership);
+    await this.membershipRepo.softDelete(id);
   }
 
-  findExpiring(): Promise<Membership[]> {
+  findExpiring(tenantId: number): Promise<Membership[]> {
     const today = getTodayBogota();
     const limit = new Date(today + 'T12:00:00');
     limit.setDate(limit.getDate() + 7);
@@ -107,6 +113,7 @@ export class MembershipsService {
     return this.membershipRepo.find({
       relations: ['client', 'vehicle'],
       where: {
+        tenantId,
         status: MembershipStatus.ACTIVE,
         endDate: Between(today, in7Days),
       },

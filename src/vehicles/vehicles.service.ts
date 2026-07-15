@@ -17,11 +17,15 @@ export class VehiclesService {
 
   async create(dto: CreateVehicleDto): Promise<Vehicle> {
     const plate = dto.plate.toUpperCase();
-    const existing = await this.vehicleRepo.findOne({ where: { plate } });
+    const existing = await this.vehicleRepo.findOne({
+      where: { tenantId: dto.tenantId, plate },
+      withDeleted: true,
+    });
     if (existing) {
       throw new ConflictException(`Ya existe un vehículo con la placa ${plate}`);
     }
     const vehicle = this.vehicleRepo.create({
+      tenantId: dto.tenantId,
       clientId: dto.clientId,
       plate,
       type: dto.type,
@@ -32,8 +36,9 @@ export class VehiclesService {
     return this.vehicleRepo.save(vehicle);
   }
 
-  async findAll() {
+  async findAll(tenantId: number) {
     const vehicles = await this.vehicleRepo.find({
+      where: { tenantId },
       relations: ['client', 'memberships'],
       order: { createdAt: 'DESC' },
     });
@@ -46,19 +51,24 @@ export class VehiclesService {
     }));
   }
 
-  async findByPlate(plate: string): Promise<Vehicle> {
-    const vehicle = await this.vehicleRepo.findOne({ where: { plate: plate.toUpperCase() } });
+  async findByPlate(plate: string, tenantId: number): Promise<Vehicle> {
+    const vehicle = await this.vehicleRepo.findOne({
+      where: { plate: plate.toUpperCase(), tenantId },
+    });
     if (!vehicle) throw new NotFoundException(`No se encontró vehículo con placa ${plate.toUpperCase()}`);
     return vehicle;
   }
 
-  async update(id: number, dto: UpdateVehicleDto): Promise<Vehicle> {
-    const vehicle = await this.vehicleRepo.findOne({ where: { id } });
+  async update(id: number, dto: UpdateVehicleDto, tenantId: number): Promise<Vehicle> {
+    const vehicle = await this.vehicleRepo.findOne({ where: { id, tenantId } });
     if (!vehicle) throw new NotFoundException(`Vehículo ${id} no encontrado`);
     if (dto.plate) {
       const plate = dto.plate.toUpperCase();
       if (plate !== vehicle.plate) {
-        const existing = await this.vehicleRepo.findOne({ where: { plate } });
+        const existing = await this.vehicleRepo.findOne({
+          where: { tenantId, plate },
+          withDeleted: true,
+        });
         if (existing) throw new ConflictException(`Ya existe un vehículo con la placa ${plate}`);
         dto.plate = plate;
       }
@@ -74,10 +84,10 @@ export class VehiclesService {
     return this.vehicleRepo.save(vehicle);
   }
 
-  async remove(id: number): Promise<void> {
-    const vehicle = await this.vehicleRepo.findOne({ where: { id } });
+  async remove(id: number, tenantId: number): Promise<void> {
+    const vehicle = await this.vehicleRepo.findOne({ where: { id, tenantId } });
     if (!vehicle) throw new NotFoundException(`Vehículo ${id} no encontrado`);
-    await this.membershipRepo.delete({ vehicleId: id });
-    await this.vehicleRepo.remove(vehicle);
+    await this.membershipRepo.softDelete({ vehicleId: id });
+    await this.vehicleRepo.softDelete(id);
   }
 }

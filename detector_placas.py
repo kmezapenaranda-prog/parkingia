@@ -52,6 +52,7 @@ def _plate_type(cleaned: str) -> str | None:
     return None
 
 PARKING_API = os.environ.get("PARKING_API_URL", "http://localhost:3000/parking/entry")
+PARKING_TENANT_ID = int(os.environ.get("PARKING_TENANT_ID", "1"))
 
 # Colores de bbox según resultado del POST (BGR)
 POST_COLORS = {
@@ -84,6 +85,11 @@ def _expand_bbox(x1: int, y1: int, x2: int, y2: int,
         min(frame_w, x2 + dw),
         min(frame_h, y2 + dh),
     )
+
+
+def _sharpness(gray: np.ndarray) -> float:
+    """Varianza del Laplaciano — a menor valor, más borrosa la imagen (motion blur)."""
+    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
 def _preprocess_roi(roi: np.ndarray) -> np.ndarray:
@@ -126,10 +132,11 @@ def _find_plate_candidates(roi: np.ndarray) -> list[tuple[int, int, int, int]]:
 
 class PlateDetector:
     def __init__(self, output_dir: str = "detecciones", save: bool = True,
-                 vehicle_conf: float = 0.5):
+                 vehicle_conf: float = 0.5, min_sharpness: float = 60.0):
         print("[init] Cargando YOLOv8n (primera vez descarga ~6 MB)...")
         self.yolo = YOLO("yolov8n.pt")
         self.vehicle_conf = vehicle_conf
+        self.min_sharpness = min_sharpness
 
         print("[init] Cargando modelo OCR (primera vez descarga ~200 MB)...")
         self.reader = easyocr.Reader(["es", "en"], gpu=GPU_AVAILABLE, verbose=False)
@@ -152,7 +159,11 @@ class PlateDetector:
     def _post_entry(self, plate: str) -> str:
         """POST /parking/entry. Retorna 'ok', 'duplicate' o 'error'."""
         try:
-            r = requests.post(PARKING_API, json={"plate": plate}, timeout=3)
+            r = requests.post(
+                PARKING_API,
+                json={"plate": plate, "tenantId": PARKING_TENANT_ID},
+                timeout=3,
+            )
             if r.status_code in (200, 201):
                 return "ok"
             if r.status_code == 409:
@@ -204,6 +215,10 @@ class PlateDetector:
             crop = roi[y1:y2, x1:x2]
             if crop.size == 0:
                 continue
+
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            if _sharpness(gray) < self.min_sharpness:
+                continue  # candidato borroso (motion blur) — no vale la pena leerlo
 
             processed = _preprocess_roi(crop)
             ocr_out = self.reader.readtext(
@@ -283,8 +298,10 @@ class PlateDetector:
 
         return frame
 
-    def _log(self, results: list[dict]) -> None:
+    def _log(self, results: list[dict]) -> list[dict]:
+        """Registra cada placa nueva del frame (uno por uno) y retorna las que sí se procesaron."""
         now = datetime.now()
+        logged: list[dict] = []
         for r in results:
             if not r["plate"]:
                 continue
@@ -304,10 +321,12 @@ class PlateDetector:
             self._plate_status[plate] = status
             r["post_status"] = status
             self.session_log.append(r)
+            logged.append(r)
 
             status_label = {"ok": "REGISTRADO", "duplicate": "YA ADENTRO", "error": "ERROR API"}
             print(f"  {r['vehicle_type'].upper():5}  {plate}  "
                   f"conf={r['plate_conf']:.0%}  [{status_label[status]}]  {r['timestamp']}")
+        return logged
 
     # ------------------------------------------------------------------ #
     # Modos de entrada
@@ -366,10 +385,11 @@ class PlateDetector:
             frame_n += 1
             fps_count += 1
 
+            logged: list[dict] = []
             if frame_n % process_every == 0:
                 last_results = self.detect(frame)
                 if last_results:
-                    self._log(last_results)
+                    logged = self._log(last_results)
 
             # Actualizar FPS cada 0.5 s
             elapsed = time.perf_counter() - fps_t0
@@ -399,6 +419,13 @@ class PlateDetector:
             cv2.imshow("Parking IA — Detector", display)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+
+            # Ya se registraron todos los carros presentes en este frame (uno por uno);
+            # cerrar de una vez para no seguir procesando frames de más.
+            if logged:
+                plates = ", ".join(r["plate"] for r in logged)
+                print(f"[cierre] {len(logged)} placa(s) registrada(s) en este frame ({plates}) — cerrando video.")
                 break
 
         cap.release()
@@ -440,6 +467,10 @@ Ejemplos:
     parser.add_argument("--camara-id",  type=int, default=0, metavar="N")
     parser.add_argument("--conf",       type=float, default=0.5,
                         help="Confianza mínima YOLO (default: 0.5)")
+    parser.add_argument("--nitidez",    type=float, default=60.0, metavar="N",
+                        help="Umbral mínimo de nitidez (varianza Laplaciano) para intentar OCR "
+                             "en un candidato a placa; súbelo si aceptas lecturas borrosas, "
+                             "bájalo si descarta placas válidas (default: 60.0)")
     parser.add_argument("--salida",     default="detecciones", metavar="DIR")
     parser.add_argument("--no-guardar", action="store_true")
     args = parser.parse_args()
@@ -448,6 +479,7 @@ Ejemplos:
         output_dir=args.salida,
         save=not args.no_guardar,
         vehicle_conf=args.conf,
+        min_sharpness=args.nitidez,
     )
 
     if args.imagen:
