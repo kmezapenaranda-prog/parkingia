@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
 export enum TenantStatus {
   ACTIVE = 'active',
@@ -6,6 +6,7 @@ export enum TenantStatus {
 }
 
 @Entity('tenants')
+@Index(['name'], { unique: true })
 export class Tenant {
   @PrimaryGeneratedColumn()
   id: number;
