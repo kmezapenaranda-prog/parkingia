@@ -5,10 +5,18 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Tenant } from '../tenants/tenant.entity';
 
 @Entity('entries')
+// Solo puede haber UNA entrada abierta (sin salida) por placa y negocio.
+// Índice parcial de Postgres: evita ingresos duplicados aunque el fetch
+// se dispare dos veces por reintentos/red.
+@Index('uq_entries_open', ['tenantId', 'plate'], {
+  unique: true,
+  where: '"exit_time" IS NULL',
+})
 export class Entry {
   @PrimaryGeneratedColumn()
   id: number;

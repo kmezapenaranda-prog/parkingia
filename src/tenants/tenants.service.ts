@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Tenant, TenantStatus } from './tenant.entity';
@@ -12,9 +12,14 @@ export class TenantsService {
     private readonly tenantRepo: Repository<Tenant>,
   ) {}
 
-  create(dto: CreateTenantDto): Promise<Tenant> {
+  async create(dto: CreateTenantDto): Promise<Tenant> {
+    const name = dto.name.trim();
+    const existing = await this.tenantRepo.findOne({ where: { name } });
+    if (existing) {
+      throw new ConflictException(`Ya existe un negocio con el nombre "${name}"`);
+    }
     const tenant = this.tenantRepo.create({
-      name: dto.name,
+      name,
       contactEmail: dto.contactEmail ?? null,
       contactPhone: dto.contactPhone ?? null,
       status: dto.status,
