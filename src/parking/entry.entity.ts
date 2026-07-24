@@ -8,6 +8,7 @@ import {
   Index,
 } from 'typeorm';
 import { Tenant } from '../tenants/tenant.entity';
+import { Vehicle } from '../vehicles/vehicle.entity';
 
 @Entity('entries')
 // Solo puede haber UNA entrada abierta (sin salida) por placa y negocio.
@@ -42,4 +43,11 @@ export class Entry {
 
   @Column({ name: 'vehicle_type', length: 10, nullable: true })
   vehicleType: string | null;
+
+  @Column({ name: 'vehicle_id', nullable: true })
+  vehicleId: number | null;
+
+  @ManyToOne(() => Vehicle, { eager: false })
+  @JoinColumn({ name: 'vehicle_id' })
+  vehicle: Vehicle | null;
 }

@@ -59,7 +59,11 @@ export class ParkingService {
     return settings;
   }
 
-  async registerEntry(tenantId: number, plate: string): Promise<Entry & { action: string }> {
+  async registerEntry(
+    tenantId: number,
+    plate: string,
+    requestedType?: 'car' | 'moto',
+  ): Promise<Entry & { action: string }> {
     const normalized = plate.toUpperCase();
     const existing = await this.entryRepo.findOne({
       where: { tenantId, plate: normalized, exitTime: IsNull() },
@@ -70,13 +74,18 @@ export class ParkingService {
       );
     }
 
+    const chosenType: VehicleType | undefined =
+      requestedType === 'car' ? VehicleType.CAR :
+      requestedType === 'moto' ? VehicleType.MOTO :
+      undefined;
+
     let vehicle = await this.vehicleRepo.findOne({ where: { tenantId, plate: normalized } });
     if (!vehicle) {
       vehicle = await this.vehicleRepo.save(
         this.vehicleRepo.create({
           tenantId,
           plate: normalized,
-          type: detectTypeFromPlate(normalized),
+          type: chosenType ?? detectTypeFromPlate(normalized),
           clientId: null,
         }),
       );
@@ -85,7 +94,8 @@ export class ParkingService {
       this.entryRepo.create({
         tenantId,
         plate: normalized,
-        vehicleType: vehicle.type,
+        vehicleType: chosenType ?? vehicle.type,
+        vehicleId: vehicle.id,
       }),
     );
 

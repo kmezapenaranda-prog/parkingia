@@ -11,7 +11,7 @@ export class ParkingController {
 
   @Post('entry')
   registerEntry(@Body() dto: RegisterEntryDto) {
-    return this.parkingService.registerEntry(dto.tenantId, dto.plate);
+    return this.parkingService.registerEntry(dto.tenantId, dto.plate, dto.vehicleType);
   }
 
   @Post('exit')
