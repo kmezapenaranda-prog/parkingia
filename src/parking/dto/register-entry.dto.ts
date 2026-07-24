@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsString, Length, Min } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Length, Min } from 'class-validator';
 
 export class RegisterEntryDto {
   @IsInt()
@@ -9,4 +9,8 @@ export class RegisterEntryDto {
   @IsNotEmpty()
   @Length(1, 10)
   plate: string;
+
+  @IsOptional()
+  @IsIn(['car', 'moto'])
+  vehicleType?: 'car' | 'moto';
 }

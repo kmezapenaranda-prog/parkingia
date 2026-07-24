@@ -6,7 +6,6 @@ import { Tenant } from '../tenants/tenant.entity';
 export enum VehicleType {
   CAR = 'car',
   MOTO = 'moto',
-  TRUCK = 'truck',
 }
 
 export enum VehicleStatus {

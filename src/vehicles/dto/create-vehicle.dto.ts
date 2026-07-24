@@ -16,10 +16,10 @@ export class CreateVehicleDto {
   @Min(1)
   tenantId: number;
 
-  @IsNotEmpty({ message: 'El id del cliente es obligatorio' })
+  @IsOptional()
   @IsInt()
   @Min(1)
-  clientId: number;
+  clientId?: number;
 
   @IsNotEmpty({ message: 'La placa es obligatoria' })
   @IsString()
