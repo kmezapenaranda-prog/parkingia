@@ -14,4 +14,9 @@ export class ReportsController {
     }
     return this.reportsService.getCajaReport(fecha, tenantId);
   }
+
+  @Get('summary')
+  getSummary(@Query('tenantId', ParseIntPipe) tenantId: number) {
+    return this.reportsService.getSummary(tenantId);
+  }
 }
