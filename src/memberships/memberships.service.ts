@@ -3,7 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 import { Membership, MembershipStatus } from './membership.entity';
 import { Vehicle } from '../vehicles/vehicle.entity';
+import { Client } from '../clients/client.entity';
+import { Tenant } from '../tenants/tenant.entity';
 import { CreateMembershipDto } from './dto/create-membership.dto';
+import { ReceiptsService } from '../receipts/receipts.service';
 
 function getTodayBogota(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
@@ -16,13 +19,23 @@ export class MembershipsService {
     private readonly membershipRepo: Repository<Membership>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(Client)
+    private readonly clientRepo: Repository<Client>,
+    @InjectRepository(Tenant)
+    private readonly tenantRepo: Repository<Tenant>,
+    private readonly receiptsService: ReceiptsService,
   ) {}
 
-  async create(dto: CreateMembershipDto): Promise<Membership> {
+  async create(dto: CreateMembershipDto): Promise<Membership & { receiptUrl: string }> {
     const vehicle = await this.vehicleRepo.findOne({
       where: { id: dto.vehicleId, tenantId: dto.tenantId },
     });
     if (!vehicle) throw new NotFoundException(`Vehículo ${dto.vehicleId} no encontrado`);
+
+    const client = await this.clientRepo.findOne({
+      where: { id: dto.clientId, tenantId: dto.tenantId },
+    });
+    if (!client) throw new NotFoundException(`Cliente ${dto.clientId} no encontrado`);
 
     const activeMembership = await this.membershipRepo.findOne({
       where: { vehicleId: dto.vehicleId, status: MembershipStatus.ACTIVE },
@@ -45,7 +58,11 @@ export class MembershipsService {
       company: dto.company ?? null,
       paidAt: new Date(),
     });
-    return this.membershipRepo.save(membership);
+    const saved = await this.membershipRepo.save(membership);
+    return {
+      ...saved,
+      receiptUrl: `/memberships/${saved.id}/receipt?tenantId=${dto.tenantId}`,
+    };
   }
 
   async cleanupAll(): Promise<{ deleted: number }> {
@@ -85,7 +102,7 @@ export class MembershipsService {
     return { status: 'ACTIVE', membership };
   }
 
-  async renew(id: number, tenantId: number): Promise<Membership> {
+  async renew(id: number, tenantId: number): Promise<Membership & { receiptUrl: string }> {
     const membership = await this.membershipRepo.findOne({ where: { id, tenantId } });
     if (!membership) throw new NotFoundException(`Mensualidad ${id} no encontrada`);
 
@@ -95,7 +112,47 @@ export class MembershipsService {
     membership.endDate = currentEnd.toISOString().split('T')[0];
     membership.status = MembershipStatus.ACTIVE;
     membership.paidAt = new Date();
-    return this.membershipRepo.save(membership);
+    const saved = await this.membershipRepo.save(membership);
+    return {
+      ...saved,
+      receiptUrl: `/memberships/${saved.id}/receipt?tenantId=${tenantId}`,
+    };
+  }
+
+  async getReceiptPdf(tenantId: number, membershipId: number): Promise<{ buffer: Buffer; filename: string }> {
+    const membership = await this.membershipRepo.findOne({
+      where: { id: membershipId, tenantId },
+      relations: ['client', 'vehicle'],
+    });
+    if (!membership) throw new NotFoundException(`Mensualidad ${membershipId} no encontrada`);
+    if (!membership.paidAt) {
+      throw new NotFoundException(`La mensualidad ${membershipId} todavía no tiene un pago registrado`);
+    }
+
+    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException(`Negocio ${tenantId} no encontrado`);
+
+    const buffer = await this.receiptsService.buildMembershipReceipt({
+      tenantName: tenant.name,
+      tenantPhone: tenant.contactPhone,
+      tenantEmail: tenant.contactEmail,
+      folio: membership.id,
+      clientName: membership.client.fullName,
+      clientDocument: membership.client.document,
+      clientPhone: membership.client.phone,
+      plate: membership.vehicle.plate,
+      vehicleType: membership.vehicle.type,
+      vehicleBrand: membership.vehicle.brand,
+      startDate: membership.startDate,
+      endDate: membership.endDate,
+      price: Number(membership.price),
+      autoRenew: membership.autoRenew,
+      company: membership.company,
+      paidAt: membership.paidAt,
+      issuedAt: new Date(),
+    });
+
+    return { buffer, filename: `mensualidad-${membership.vehicle.plate}-${membership.id}.pdf` };
   }
 
   async remove(id: number, tenantId: number): Promise<void> {

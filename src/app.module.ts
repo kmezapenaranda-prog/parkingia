@@ -27,7 +27,10 @@ import { User } from './users/user.entity';
       url: process.env.DATABASE_URL,
       entities: [Entry, Client, Vehicle, Membership, Settings, Tenant, User],
       synchronize: true,
-      ssl: { rejectUnauthorized: false },
+      // Postgres local (Docker) no soporta SSL; los proveedores gestionados (Neon, etc.) sí lo exigen.
+      ssl: /localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL ?? '')
+        ? false
+        : { rejectUnauthorized: false },
       extra: { options: '-c timezone=America/Bogota' },
     }),
     ClientsModule,

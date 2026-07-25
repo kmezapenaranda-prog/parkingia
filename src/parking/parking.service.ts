@@ -3,10 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, In, Repository } from 'typeorm';
 import { Entry } from './entry.entity';
 import { Vehicle, VehicleType } from '../vehicles/vehicle.entity';
+import { Tenant } from '../tenants/tenant.entity';
 import { MembershipsService } from '../memberships/memberships.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SettingsService } from '../settings/settings.service';
 import { Settings } from '../settings/settings.entity';
+import { ReceiptsService } from '../receipts/receipts.service';
 
 function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -44,9 +46,12 @@ export class ParkingService {
     private readonly entryRepo: Repository<Entry>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(Tenant)
+    private readonly tenantRepo: Repository<Tenant>,
     private readonly membershipsService: MembershipsService,
     private readonly notificationsService: NotificationsService,
     private readonly settingsService: SettingsService,
+    private readonly receiptsService: ReceiptsService,
   ) {}
 
   private async getSettingsOrThrow(tenantId: number): Promise<Settings> {
@@ -126,8 +131,9 @@ export class ParkingService {
     );
 
     const { status } = await this.membershipsService.getStatusByPlate(normalized, tenantId);
+    const coveredByMembership = status === 'ACTIVE';
     let amountToPay = 0;
-    if (status !== 'ACTIVE') {
+    if (!coveredByMembership) {
       const settings = await this.getSettingsOrThrow(tenantId);
       const vehicleType = entry.vehicleType ?? 'car';
       amountToPay = calculateFare(totalMinutes, vehicleType, settings);
@@ -135,6 +141,7 @@ export class ParkingService {
 
     entry.exitTime = exitTime;
     entry.amountPaid = amountToPay;
+    entry.coveredByMembership = coveredByMembership;
     await this.entryRepo.save(entry);
 
     const duration = formatDuration(totalMinutes);
@@ -148,7 +155,45 @@ export class ParkingService {
       totalMinutes,
       amountToPay,
       currency: 'COP',
+      receiptUrl: `/parking/entries/${entry.id}/receipt?tenantId=${tenantId}`,
     };
+  }
+
+  async getExitReceiptPdf(tenantId: number, entryId: number): Promise<{ buffer: Buffer; filename: string }> {
+    const entry = await this.entryRepo.findOne({ where: { id: entryId, tenantId } });
+    if (!entry) throw new NotFoundException(`Ingreso ${entryId} no encontrado`);
+    if (!entry.exitTime) {
+      throw new BadRequestException('Este ingreso todavía no tiene una salida registrada');
+    }
+
+    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException(`Negocio ${tenantId} no encontrado`);
+
+    const vehicle = entry.vehicleId
+      ? await this.vehicleRepo.findOne({ where: { id: entry.vehicleId } })
+      : null;
+
+    const totalMinutes = Math.ceil(
+      (entry.exitTime.getTime() - entry.entryTime.getTime()) / 60000,
+    );
+
+    const buffer = await this.receiptsService.buildParkingExitReceipt({
+      tenantName: tenant.name,
+      tenantPhone: tenant.contactPhone,
+      tenantEmail: tenant.contactEmail,
+      folio: entry.id,
+      plate: entry.plate,
+      vehicleType: entry.vehicleType ?? vehicle?.type ?? 'car',
+      vehicleBrand: vehicle?.brand ?? null,
+      entryTime: entry.entryTime,
+      exitTime: entry.exitTime,
+      durationLabel: formatDuration(totalMinutes),
+      amountPaid: entry.amountPaid ?? 0,
+      coveredByMembership: entry.coveredByMembership,
+      issuedAt: new Date(),
+    });
+
+    return { buffer, filename: `recibo-${entry.plate}-${entry.id}.pdf` };
   }
 
   async getStatus(tenantId: number, plate: string) {

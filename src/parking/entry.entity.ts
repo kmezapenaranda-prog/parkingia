@@ -47,6 +47,12 @@ export class Entry {
   @Column({ name: 'vehicle_id', nullable: true })
   vehicleId: number | null;
 
+  // Fijado en el momento de la salida: evita inferir el tipo de cobro a
+  // partir de amount_paid === 0, que sería ambiguo si un tenant configura
+  // una tarifa gratuita.
+  @Column({ name: 'covered_by_membership', type: 'boolean', default: false })
+  coveredByMembership: boolean;
+
   @ManyToOne(() => Vehicle, { eager: false })
   @JoinColumn({ name: 'vehicle_id' })
   vehicle: Vehicle | null;

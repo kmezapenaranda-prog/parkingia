@@ -10,8 +10,10 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
+  Res,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
 import { MembershipsService } from './memberships.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 
@@ -45,6 +47,20 @@ export class MembershipsController {
   @Put(':id/renew')
   renew(@Param('id', ParseIntPipe) id: number, @Query('tenantId', ParseIntPipe) tenantId: number) {
     return this.membershipsService.renew(id, tenantId);
+  }
+
+  @Get(':id/receipt')
+  async getReceipt(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('tenantId', ParseIntPipe) tenantId: number,
+    @Res() res: Response,
+  ) {
+    const { buffer, filename } = await this.membershipsService.getReceiptPdf(tenantId, id);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    });
+    res.send(buffer);
   }
 
   @Delete(':id')
