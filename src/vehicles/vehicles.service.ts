@@ -1,10 +1,10 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Vehicle } from './vehicle.entity';
+import { Vehicle, VehicleStatus } from './vehicle.entity';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
-import { Membership } from '../memberships/membership.entity';
+import { Membership, MembershipStatus } from '../memberships/membership.entity';
 
 @Injectable()
 export class VehiclesService {
@@ -87,7 +87,10 @@ export class VehiclesService {
   async remove(id: number, tenantId: number): Promise<void> {
     const vehicle = await this.vehicleRepo.findOne({ where: { id, tenantId } });
     if (!vehicle) throw new NotFoundException(`Vehículo ${id} no encontrado`);
+    await this.membershipRepo.update({ vehicleId: id }, { status: MembershipStatus.CANCELLED });
     await this.membershipRepo.softDelete({ vehicleId: id });
+    vehicle.status = VehicleStatus.INACTIVE;
+    await this.vehicleRepo.save(vehicle);
     await this.vehicleRepo.softDelete(id);
   }
 }
