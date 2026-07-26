@@ -25,6 +25,10 @@ function detectTypeFromPlate(plate: string): VehicleType {
   return VehicleType.CAR;
 }
 
+// Un vehículo que lleva más de esto adentro suele ser síntoma de abandono,
+// olvido del operador o evasión de cobro — no de una estadía legítima larga.
+const EXCESSIVE_TIME_ALERT_MINUTES = 24 * 60;
+
 function calculateFare(totalMinutes: number, vehicleType: string, s: Settings): number {
   const isMoto = vehicleType === 'moto';
   const fraccion = isMoto ? s.fraccionMoto : s.fraccionCarro;
@@ -241,6 +245,7 @@ export class ParkingService {
         currentMinutes,
         duration: formatDuration(currentMinutes),
         estimatedCost,
+        excessiveTimeAlert: currentMinutes >= EXCESSIVE_TIME_ALERT_MINUTES,
       };
     });
   }

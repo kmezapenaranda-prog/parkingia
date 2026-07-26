@@ -12,6 +12,30 @@ function getTodayBogota(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
 }
 
+function normalizeDateStr(d: string | Date): string {
+  return typeof d === 'string'
+    ? d.slice(0, 10)
+    : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(d);
+}
+
+// Días transcurridos entre dos fechas YYYY-MM-DD (positivo = from ya pasó).
+function daysBetween(fromISO: string, toISO: string): number {
+  const [fy, fm, fd] = fromISO.split('-').map(Number);
+  const [ty, tm, td] = toISO.split('-').map(Number);
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86_400_000);
+}
+
+// El status guardado en BD no se actualiza solo con el paso del tiempo (solo
+// create/renew lo tocan) — se recalcula aquí para lo que se lee, sin persistirlo.
+function withComputedStatus(m: Membership): Membership & { daysOverdue: number } {
+  const today = getTodayBogota();
+  const endDateStr = normalizeDateStr(m.endDate);
+  if (m.status !== MembershipStatus.CANCELLED) {
+    m.status = endDateStr < today ? MembershipStatus.EXPIRED : MembershipStatus.ACTIVE;
+  }
+  return { ...m, daysOverdue: daysBetween(endDateStr, today) };
+}
+
 @Injectable()
 export class MembershipsService {
   constructor(
@@ -70,12 +94,13 @@ export class MembershipsService {
     return { deleted: result[1] ?? 0 };
   }
 
-  findAll(tenantId: number): Promise<Membership[]> {
-    return this.membershipRepo.find({
+  async findAll(tenantId: number): Promise<(Membership & { daysOverdue: number })[]> {
+    const memberships = await this.membershipRepo.find({
       where: { tenantId },
       relations: ['client', 'vehicle'],
       order: { createdAt: 'DESC' },
     });
+    return memberships.map(withComputedStatus);
   }
 
   async getStatusByPlate(plate: string, tenantId: number): Promise<{ status: string; membership?: Membership }> {
